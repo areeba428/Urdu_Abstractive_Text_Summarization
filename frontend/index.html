@@ -203,21 +203,27 @@ textarea#article:focus{
 .counters b{color:var(--ink);font-weight:600;font-size:12.5px}
 
 /* --- mode switch: two printed keys --- */
-.switch{display:inline-flex;border:1px solid rgba(23,19,12,.4);border-radius:2px;overflow:hidden;background:rgba(250,245,234,.6)}
-.switch input{position:absolute;opacity:0;width:0;height:0}
+.switch{position:relative;display:inline-flex;border:1px solid rgba(23,19,12,.4);border-radius:2px;overflow:hidden;background:rgba(250,245,234,.6)}
+/* The real radio is a full-size transparent overlay INSIDE its label, so the
+   visible key is clickable AND the input keeps a real hit box. A 0x0 hidden
+   input has no click target and cannot be clicked by users or by hit-testing. */
+.switch input{
+  position:absolute;inset:0;margin:0;z-index:2;cursor:pointer;
+  opacity:0;appearance:none;-webkit-appearance:none;
+}
 .switch label{
-  cursor:pointer;padding:7px 15px 8px;display:flex;flex-direction:column;gap:2px;align-items:center;
+  position:relative;cursor:pointer;padding:7px 15px 8px;display:flex;flex-direction:column;gap:2px;align-items:center;
   font-family:var(--naskh);font-size:14px;line-height:1.5;color:var(--ink-soft);
   border-inline-start:1px solid rgba(23,19,12,.22);
   transition:background .22s,color .22s,transform .12s;user-select:none;
 }
 .switch label:first-of-type{border-inline-start:none}
 .switch label span{font-family:var(--mono);font-size:8.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.8}
-.switch input:checked + label{background:var(--ink);color:var(--paper-hi)}
-.switch input:checked + label span{color:var(--vermilion);opacity:1}
-.switch input:focus-visible + label{outline:2px solid var(--vermilion);outline-offset:-3px}
+.switch label:has(input:checked){background:var(--ink);color:var(--paper-hi)}
+.switch label:has(input:checked) span{color:var(--vermilion);opacity:1}
+.switch label:has(input:focus-visible){outline:2px solid var(--vermilion);outline-offset:-3px}
 .switch label:hover{background:rgba(23,19,12,.08)}
-.switch input:checked + label:hover{background:var(--ink-2)}
+.switch label:has(input:checked):hover{background:var(--ink-2)}
 
 /* --- buttons --- */
 .actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
@@ -463,10 +469,14 @@ button{font:inherit;cursor:pointer}
         <button class="btn-ghost" id="clear" type="button">صاف کریں</button>
 
         <div class="switch" role="radiogroup" aria-label="Decoding mode">
-          <input type="radio" name="mode" id="mode-beam" value="beam" checked>
-          <label for="mode-beam">شعاعی تلاش<span class="ltr">beam · 4</span></label>
-          <input type="radio" name="mode" id="mode-greedy" value="greedy">
-          <label for="mode-greedy">فوری<span class="ltr">greedy</span></label>
+          <label for="mode-beam">
+            <input type="radio" name="mode" id="mode-beam" value="beam" checked>
+            شعاعی تلاش<span class="ltr">beam · 4</span>
+          </label>
+          <label for="mode-greedy">
+            <input type="radio" name="mode" id="mode-greedy" value="greedy">
+            فوری<span class="ltr">greedy</span>
+          </label>
         </div>
       </div>
     </section>
