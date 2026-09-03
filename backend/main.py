@@ -22,10 +22,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
+from . import auth
 from .inference import (
     BEAM_SIZE,
     MAX_SOURCE_WORDS,
@@ -42,6 +43,8 @@ logger = logging.getLogger('uats.web')
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / 'frontend'
 INDEX_HTML = FRONTEND_DIR / 'index.html'
+LOGIN_HTML = FRONTEND_DIR / 'login.html'
+SIGNUP_HTML = FRONTEND_DIR / 'signup.html'
 
 # Stanza is only ever fed MAX_TOKENIZE_CHARS, and the encoder only sees
 # MAX_SOURCE_WORDS - 2 tokens, so a 20k-character body is already far more text
@@ -100,6 +103,32 @@ def summarizer() -> UrduSummarizer:
     return instance
 
 
+# --- authentication (Task #23): email + password, SQLite-backed sessions ---
+SIGNUP_MESSAGE = 'Account created. / اکاؤنٹ بن گیا۔'
+DUPLICATE_MESSAGE = ('This email is already registered — sign in instead. / '
+                     'یہ ای میل پہلے سے رجسٹرڈ ہے — براہ کرم لاگ ان کریں۔')
+
+
+class CredentialsRequest(BaseModel):
+    """Shared body for /auth/signup and /auth/login; validation yields 422."""
+    email: str = Field(..., min_length=3, max_length=auth.MAX_EMAIL_LEN,
+                       pattern=auth.EMAIL_PATTERN,
+                       description='Account email (a Gmail or any valid address).')
+    password: str = Field(..., min_length=auth.MIN_PASSWORD_LEN,
+                          max_length=auth.MAX_PASSWORD_LEN,
+                          description=f'Password, {auth.MIN_PASSWORD_LEN}-'
+                                      f'{auth.MAX_PASSWORD_LEN} characters.')
+
+
+def require_auth(request: Request) -> dict:
+    """Dependency: a valid, unexpired ``session`` cookie is required."""
+    token = request.cookies.get(auth.SESSION_COOKIE)
+    user = auth.get_user_by_session(token) if token else None
+    if not user:
+        raise HTTPException(status_code=401, detail='authentication required')
+    return user
+
+
 @app.get('/', include_in_schema=False)
 async def index():
     if not INDEX_HTML.exists():
@@ -137,7 +166,7 @@ async def health():
 
 
 @app.post('/summarize', response_model=SummarizeResponse)
-def summarize(payload: SummarizeRequest):
+def summarize(payload: SummarizeRequest, user: dict = Depends(require_auth)):
     article = (payload.article or '').strip()
     if not article:
         raise HTTPException(status_code=400, detail='Article text is empty.')
@@ -172,3 +201,83 @@ def summarize(payload: SummarizeRequest):
     # user can confirm the summary came from THEIR input, not a cached sample.
     result['received_first_words'] = ' '.join(article.split()[:8])
     return result
+
+
+# --------------------------------------------------------------------------- #
+# Authentication routes (Task #23). Every handler is a sync ``def`` so its
+# SQLite work runs on FastAPI's thread pool exactly like ``/summarize`` — never
+# on the event loop. Password hashes and exception internals are never returned.
+# --------------------------------------------------------------------------- #
+def _session_response(status_code: int, token: str, content: dict) -> JSONResponse:
+    response = JSONResponse(status_code=status_code, content=content)
+    response.set_cookie(
+        auth.SESSION_COOKIE, token,
+        max_age=auth.SESSION_MAX_AGE, httponly=True, path='/', samesite='lax',
+    )
+    return response
+
+
+@app.post('/auth/signup', status_code=201)
+def auth_signup(payload: CredentialsRequest):
+    try:
+        user_id = auth.create_user(payload.email, payload.password)
+    except auth.DuplicateEmail:
+        raise HTTPException(status_code=409, detail=DUPLICATE_MESSAGE) from None
+    except ValueError as error:  # safety net; Pydantic normally rejects first (422)
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    token = auth.create_session(user_id)  # auto-login straight after signup
+    return _session_response(201, token, {
+        'email': auth.normalize_email(payload.email),
+        'message': SIGNUP_MESSAGE,
+    })
+
+
+@app.post('/auth/login')
+def auth_login(payload: CredentialsRequest):
+    try:
+        user_id = auth.authenticate(payload.email, payload.password)
+    except auth.AccountLocked as locked:
+        raise HTTPException(status_code=401, detail=str(locked)) from None
+    except auth.InvalidCredentials:
+        # Constant message: no hint about whether the email exists.
+        raise HTTPException(status_code=401, detail='Invalid email or password.') from None
+    token = auth.create_session(user_id)
+    return _session_response(200, token, {
+        'email': auth.normalize_email(payload.email),
+        'message': 'Signed in. / خوش آمدید۔',
+    })
+
+
+@app.post('/auth/logout')
+def auth_logout(request: Request):
+    token = request.cookies.get(auth.SESSION_COOKIE)
+    if token:
+        auth.delete_session(token)
+    response = JSONResponse(status_code=200, content={'message': 'Signed out. / الوداع۔'})
+    response.delete_cookie(auth.SESSION_COOKIE, path='/', httponly=True, samesite='lax')
+    return response
+
+
+@app.get('/auth/me')
+def auth_me(request: Request):
+    token = request.cookies.get(auth.SESSION_COOKIE)
+    user = auth.get_user_by_session(token) if token else None
+    if not user:
+        return JSONResponse(status_code=401, content={'authenticated': False})
+    return {'authenticated': True, 'email': user['email']}
+
+
+@app.get('/login', include_in_schema=False)
+async def login_page():
+    if not LOGIN_HTML.exists():
+        logger.error('UI asset missing: %s', LOGIN_HTML)
+        raise HTTPException(status_code=500, detail='The login page asset is missing on the server.')
+    return FileResponse(LOGIN_HTML, media_type='text/html; charset=utf-8')
+
+
+@app.get('/signup', include_in_schema=False)
+async def signup_page():
+    if not SIGNUP_HTML.exists():
+        logger.error('UI asset missing: %s', SIGNUP_HTML)
+        raise HTTPException(status_code=500, detail='The signup page asset is missing on the server.')
+    return FileResponse(SIGNUP_HTML, media_type='text/html; charset=utf-8')

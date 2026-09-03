@@ -74,17 +74,36 @@ Alternatively, upload `best_model.pt` and `vocab_100k.json` through the Space's
 > upload the weights to the mounted `/data` volume, and set
 > `UATS_MODEL_DIR=/data` (with `checkpoints/` and `cache/` inside it).
 
-## 4. Set `UATS_MODEL_DIR`
+## 4. Set the environment variables
 
-In **Space → Settings → Variables and secrets**, add a variable:
+In **Space → Settings → Variables and secrets**, add:
 
-| Name              | Value                            |
-| ----------------- | -------------------------------- |
-| `UATS_MODEL_DIR`  | `/app/data` (default in the image) |
+| Name              | Value                              | Purpose |
+| ----------------- | ---------------------------------- | ------- |
+| `UATS_MODEL_DIR`  | `/app/data` (default in the image) | Where `checkpoints/` + `cache/` live |
+| `AUTH_DB_PATH`    | `/data/accounts.db`                | Where the signup/login SQLite DB lives |
 
-Set it to the directory that actually contains `checkpoints/` and `cache/`
-(`/app/data` if you committed the weights under `data/`, or `/data` for the
-persistent-storage volume). Restart the Space after changing it.
+Set `UATS_MODEL_DIR` to the directory that actually contains `checkpoints/` and
+`cache/` (`/app/data` if you committed the weights under `data/`, or `/data` for
+the persistent-storage volume). Restart the Space after changing it.
+
+### 4a. Persist user accounts (important)
+
+The app stores email/password accounts and sessions in a SQLite file
+(`backend/auth.py`). By default it lives at `/app/data/accounts.db`, which is
+part of the **ephemeral** container filesystem — **every restart or rebuild wipes
+it, so all registered users are lost.**
+
+To keep accounts across restarts:
+
+1. **Space → Settings → Storage** → enable **persistent storage** (mounts `/data`).
+2. Set the variable `AUTH_DB_PATH=/data/accounts.db`.
+3. Restart the Space. The `data/` directory is created automatically on first
+   signup; the DB file is created if missing.
+
+> Without persistent storage the summarizer still works, but users must sign up
+> again after each restart. Sessions last 7 days (a `session` cookie, HttpOnly,
+> SameSite=Lax). After 5 failed logins an address is locked out for 15 minutes.
 
 ## 5. Get the Space URL
 
@@ -113,10 +132,13 @@ In your **Vercel project → Settings → Environment Variables**, add:
 | -------------- | -------------------------------------------- |
 | `BACKEND_URL`  | `https://<your-user>-<your-space>.hf.space`  |
 
-Redeploy Vercel. The `api/health.py`, `api/sample.py` and `api/summarize.py`
-functions read `BACKEND_URL` and proxy to the Space, so the UI's same-origin
-`fetch('/summarize')`, `fetch('/health')` and `fetch('/sample')` calls (routed by
-`vercel.json` rewrites) now reach the real model.
+Redeploy Vercel. The `api/health.py`, `api/sample.py`, `api/summarize.py` and the
+four `api/auth_*.py` functions read `BACKEND_URL` and proxy to the Space. Every
+proxy forwards the browser's `Cookie` header to the backend and relays the
+backend's `Set-Cookie` back, so the same-origin `fetch('/summarize')`,
+`fetch('/health')`, `fetch('/sample')`, `fetch('/auth/me')`, `fetch('/auth/login')`,
+`fetch('/auth/signup')` and `fetch('/auth/logout')` calls (routed by `vercel.json`
+rewrites) keep the user signed in through the proxy.
 
 ---
 

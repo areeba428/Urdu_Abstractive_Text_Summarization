@@ -132,6 +132,14 @@ body::after{
 .dot.bad{background:var(--vermilion);box-shadow:0 0 0 3px rgba(176,58,28,.2)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.42}}
 .statusbar b{color:var(--ink);font-weight:600}
+/* account chip (Task #23): shows the signed-in email + logout */
+.account{display:inline-flex;align-items:center;gap:9px;margin-inline-start:auto}
+.acct-email{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--ink);
+  border:1px solid rgba(23,19,12,.28);background:rgba(250,245,234,.72);
+  padding:3px 9px;border-radius:2px;max-width:32ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.btn-tiny{font-family:var(--naskh);font-size:12.5px;padding:4px 12px;line-height:1.7}
 
 /* ---------------- press floor ---------------- */
 .press{
@@ -414,6 +422,10 @@ button{font:inherit;cursor:pointer}
     <div class="statusbar rise d4">
       <span class="led"><i class="dot" id="dot"></i><span id="model-status">ماڈل لوڈ ہو رہا ہے…</span></span>
       <span class="ltr" id="model-facts">checkpoint · vocab · stanza</span>
+      <span class="account" id="account" hidden>
+        <span class="acct-email ltr" id="acct-email" title="signed in"></span>
+        <button class="btn-ghost btn-tiny" id="logout" type="button">لاگ آؤٹ<span class="ltr"> · out</span></button>
+      </span>
     </div>
   </header>
 
@@ -550,6 +562,7 @@ button{font:inherit;cursor:pointer}
   var dotEl = $('dot'), statusEl = $('model-status'), factsEl = $('model-facts');
   var sealMeta = $('seal-meta'), stageEl = $('stage'), tickerEl = $('ticker');
   var echoEl = $('echo'), warnEl = $('warn-block'), sampleBadge = $('sample-badge');
+  var accountEl = $('account'), acctEmailEl = $('acct-email'), logoutEl = $('logout');
   var busy = false, ready = false, stageTimer = null, elapsedTimer = null, startedAt = 0;
   var healthTimer = null, healthAttempts = 0, sampleText = null;
 
@@ -782,6 +795,8 @@ button{font:inherit;cursor:pointer}
       })
       .catch(function (err) {
         stopComposing();
+        // Session expired or was revoked mid-use: send the user to sign in again.
+        if (err && err.status === 401) { window.location.replace('/login'); return; }
         emptyEl.hidden = false;
         if (err && err.name === 'AbortError') {
           showError('سرور نے ' + (REQUEST_TIMEOUT_MS / 1000) + ' سیکنڈ میں جواب نہیں دیا۔ دوبارہ کوشش کریں یا «فوری» موڈ چنیں۔',
@@ -827,6 +842,31 @@ button{font:inherit;cursor:pointer}
 
   refreshCounts();
   health();
+
+  /* ---------- auth gate (Task #23): the summarizer sits behind a session ---------- */
+  function requireAuth() {
+    fetch('/auth/me', { cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 401) { window.location.replace('/login'); return null; }
+        return r.json();
+      })
+      .then(function (j) {
+        if (j && j.authenticated) {
+          if (acctEmailEl) { acctEmailEl.textContent = j.email; }
+          if (accountEl) { accountEl.hidden = false; }
+        }
+      })
+      .catch(function () { /* transient network error: /health keeps re-probing */ });
+  }
+  if (logoutEl) {
+    logoutEl.addEventListener('click', function () {
+      logoutEl.disabled = true;
+      fetch('/auth/logout', { method: 'POST' })
+        .then(function () { window.location.replace('/login'); })
+        .catch(function () { window.location.replace('/login'); });
+    });
+  }
+  requireAuth();
 })();
 </script>
 </body>

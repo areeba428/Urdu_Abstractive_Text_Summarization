@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>لاگ ان — خلاصہ نگار · Sign in</title>
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ece2ce">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2317130c'/%3E%3Ccircle cx='32' cy='32' r='21' fill='none' stroke='%23b03a1c' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='15' fill='none' stroke='%23a8862f' stroke-width='1' stroke-dasharray='3 3'/%3E%3Ctext x='32' y='41' font-size='22' text-anchor='middle' fill='%23f5eddd' font-family='serif'%3E%D8%AE%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,900;1,9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Shared broadsheet look, extracted from index.html (self-contained page). */
+:root{
+  --paper:#ece2ce; --paper-hi:#f5eddd; --paper-lo:#ddcfb4;
+  --ink:#17130c; --ink-2:#2e2819; --ink-soft:#5d5340;
+  --vermilion:#b03a1c; --vermilion-2:#8d2c14; --emerald:#1f5c46; --gold:#a8862f;
+  --nastaliq:"Noto Nastaliq Urdu","Jameel Noori Nastaleeq","Awami Nastaliq",serif;
+  --naskh:"Noto Naskh Arabic","Noto Nastaliq Urdu",serif;
+  --display:"Fraunces","Times New Roman",serif;
+  --mono:"IBM Plex Mono",ui-monospace,"Courier New",monospace;
+  --rule:1px solid rgba(23,19,12,.28);
+  --shadow-press:0 1px 0 rgba(245,237,221,.6),0 12px 26px -18px rgba(23,19,12,.9);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh;color:var(--ink);font-family:var(--naskh);
+  background-color:var(--paper);
+  background-image:
+    radial-gradient(120% 80% at 88% -10%,rgba(255,252,242,.85),transparent 60%),
+    radial-gradient(90% 70% at 5% 105%,rgba(120,96,52,.22),transparent 65%),
+    repeating-linear-gradient(to left,transparent 0 118px,rgba(23,19,12,.045) 118px 119px),
+    linear-gradient(178deg,var(--paper-hi),var(--paper) 38%,var(--paper-lo));
+  -webkit-font-smoothing:antialiased;
+  display:flex;align-items:center;justify-content:center;padding:32px 16px;
+}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:60;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23n)' opacity='0.34'/%3E%3C/svg%3E");}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:59;
+  box-shadow:inset 0 0 180px rgba(60,44,20,.34),inset 0 0 40px rgba(60,44,20,.16);}
+.ltr{direction:ltr;unicode-bidi:isolate}
+.mono{font-family:var(--mono)}
+
+.card{
+  position:relative;z-index:1;width:100%;max-width:440px;
+  background:rgba(250,245,234,.82);border:1px solid rgba(23,19,12,.34);border-radius:3px;
+  box-shadow:var(--shadow-press),inset 0 0 40px rgba(168,134,47,.07);
+  padding:26px clamp(18px,4vw,32px) 28px;animation:rise .6s cubic-bezier(.2,.75,.25,1) both;
+}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.card::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;border-radius:3px 3px 0 0;
+  background:linear-gradient(to left,var(--emerald),var(--gold) 55%,var(--vermilion));}
+
+.brand{text-align:center;margin-bottom:6px}
+.brand .kicker{font-family:var(--mono);font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--vermilion)}
+.brand h1{margin:2px 0 0;font-family:var(--nastaliq);font-weight:700;font-size:clamp(34px,7vw,46px);line-height:1.6;
+  text-shadow:0 1px 0 rgba(245,237,221,.7),0 2px 1px rgba(23,19,12,.14)}
+.brand h1 .rubric{color:var(--vermilion)}
+.brand .sub{font-family:var(--display);font-style:italic;font-weight:700;font-size:13px;color:var(--ink-soft);margin-top:-4px}
+.rules{border-top:3px double rgba(23,19,12,.55);border-bottom:var(--rule);height:5px;margin:14px 0 18px}
+
+.page-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:14px}
+.page-head h2{margin:0;font-family:var(--nastaliq);font-weight:700;font-size:24px;line-height:1.8}
+.page-head .tag{font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);white-space:nowrap}
+
+.field{margin-bottom:15px}
+.field label{display:block;margin-bottom:5px}
+.field .ur{font-family:var(--naskh);font-size:15px;color:var(--ink-2);font-weight:600}
+.field .en{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);margin-inline-start:7px}
+.field input{
+  display:block;width:100%;padding:11px 13px;font-family:var(--mono);font-size:15px;color:var(--ink-2);
+  direction:ltr;text-align:left;background:rgba(253,249,241,.9);
+  border:1px solid rgba(23,19,12,.34);border-radius:2px;outline:none;
+  transition:border-color .22s,box-shadow .22s,background .22s;
+}
+.field input::placeholder{color:rgba(93,83,64,.55)}
+.field input:focus{border-color:var(--vermilion);background:rgba(253,249,241,1);box-shadow:0 0 0 3px rgba(176,58,28,.13)}
+.field input[aria-invalid="true"]{border-color:var(--vermilion);box-shadow:0 0 0 3px rgba(176,58,28,.16)}
+
+.btn{
+  width:100%;border:1px solid var(--ink);border-radius:2px;padding:12px 20px 13px;background:var(--ink);color:var(--paper-hi);
+  font-family:var(--nastaliq);font-size:18px;font-weight:600;line-height:2;cursor:pointer;
+  box-shadow:0 3px 0 var(--vermilion-2),0 12px 20px -14px rgba(23,19,12,1);
+  transition:transform .1s,box-shadow .1s,background .25s;margin-top:4px;
+}
+.btn:hover:not(:disabled){background:var(--ink-2)}
+.btn:active:not(:disabled){transform:translateY(3px);box-shadow:0 0 0 var(--vermilion-2),0 6px 12px -10px rgba(23,19,12,1)}
+.btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
+.btn .latin{display:block;font-family:var(--mono);font-size:8.5px;letter-spacing:.24em;color:var(--vermilion);line-height:1;margin-top:3px}
+.btn:focus-visible{outline:2px solid var(--vermilion);outline-offset:3px}
+
+.error{
+  margin:4px 0 14px;border:2px solid var(--vermilion);border-radius:2px;background:rgba(176,58,28,.12);
+  color:#7f2a12;padding:11px 13px;font-family:var(--naskh);font-size:15px;line-height:1.9;animation:shake .4s ease;
+}
+.error b{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:var(--vermilion);margin-bottom:5px}
+.error .en{display:block;direction:ltr;text-align:left;font-family:var(--mono);font-size:10.5px;line-height:1.6;color:var(--ink-soft);margin-top:4px}
+.error[hidden]{display:none}
+@keyframes shake{0%,100%{transform:none}20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+
+.swap{margin-top:16px;text-align:center;font-family:var(--naskh);font-size:14.5px;color:var(--ink-soft)}
+.swap a{color:var(--vermilion);font-weight:700;text-decoration:none;border-bottom:1px solid rgba(176,58,28,.4)}
+.swap a:hover{color:var(--vermilion-2);border-color:var(--vermilion-2)}
+.swap .en{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;margin-top:4px}
+.footnote{margin-top:16px;border-top:var(--rule);padding-top:10px;text-align:center;
+  font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft)}
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand">
+      <div class="kicker ltr">Urdu Abstractive Summarization</div>
+      <h1>خلاصہ<span class="rubric">&nbsp;نگار</span></h1>
+      <div class="sub ltr">Welcome back</div>
+    </div>
+    <div class="rules"></div>
+
+    <div class="page-head">
+      <h2>لاگ ان</h2>
+      <span class="tag ltr">Sign&nbsp;in · email&nbsp;+&nbsp;password</span>
+    </div>
+
+    <div class="error" id="error" hidden></div>
+
+    <form id="login-form" novalidate>
+      <div class="field">
+        <label for="email"><span class="ur">ای میل</span><span class="en ltr">Email</span></label>
+        <input id="email" name="email" type="email" inputmode="email" autocomplete="email"
+               placeholder="example@gmail.com" required>
+      </div>
+
+      <div class="field">
+        <label for="password"><span class="ur">پاس ورڈ</span><span class="en ltr">Password</span></label>
+        <input id="password" name="password" type="password" autocomplete="current-password"
+               maxlength="200" placeholder="••••••••" required>
+      </div>
+
+      <button class="btn" id="submit" type="submit">لاگ ان<span class="latin ltr">Sign in</span></button>
+    </form>
+
+    <p class="swap">
+      اکاؤنٹ نہیں ہے؟ <a href="/signup">رجسٹر کریں</a>
+      <span class="en ltr">No account yet? Sign up</span>
+    </p>
+    <p class="footnote ltr">Your session lasts 7 days · summarizing needs a sign-in</p>
+  </main>
+
+<script>
+(function () {
+  'use strict';
+  var EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  var $ = function (id) { return document.getElementById(id); };
+  var form = $('login-form'), emailEl = $('email'), pwEl = $('password'),
+      submitEl = $('submit'), errorEl = $('error');
+
+  function esc(s) {
+    return String(s).replace(/[<>&"]/g, function (c) {
+      return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c];
+    });
+  }
+  function showError(urdu, english, label) {
+    var html = '<b class="ltr">' + esc(label || 'Error') + '</b><span>' + esc(urdu) + '</span>';
+    if (english) { html += '<span class="en">' + esc(english) + '</span>'; }
+    errorEl.innerHTML = html;
+    errorEl.hidden = false;
+  }
+  function clearError() { errorEl.hidden = true; errorEl.innerHTML = ''; }
+  function markInvalid(el, bad) { if (el) { el.setAttribute('aria-invalid', bad ? 'true' : 'false'); } }
+
+  function detailToText(detail) {
+    if (typeof detail === 'string') { return detail; }
+    if (Array.isArray(detail)) {
+      return detail.map(function (d) {
+        var field = (d.loc && d.loc[d.loc.length - 1]) || '';
+        return (field ? field + ': ' : '') + (d.msg || JSON.stringify(d));
+      }).join(' · ');
+    }
+    return JSON.stringify(detail || 'Request failed.');
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    clearError();
+    var email = emailEl.value.trim(), pw = pwEl.value;
+    markInvalid(emailEl, false); markInvalid(pwEl, false);
+
+    if (!EMAIL_RE.test(email)) {
+      markInvalid(emailEl, true);
+      showError('ایک درست ای میل پتہ درج کریں۔', 'Enter a valid email address.', 'Invalid email');
+      emailEl.focus(); return;
+    }
+    if (!pw) {
+      markInvalid(pwEl, true);
+      showError('پاس ورڈ درج کریں۔', 'Enter your password.', 'Missing password');
+      pwEl.focus(); return;
+    }
+
+    submitEl.disabled = true;
+    submitEl.querySelector('.latin').textContent = 'signing in…';
+
+    fetch('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, password: pw })
+    })
+      .then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; },
+          function () { return { ok: r.ok, status: r.status, body: {} }; });
+      })
+      .then(function (res) {
+        if (res.ok) { window.location.replace('/'); return; }  // cookie already set
+        // 401 = wrong credentials OR temporary lockout; show the server's message.
+        var text = detailToText(res.body.detail);
+        if (res.status === 401) {
+          showError(text, res.status === 401 ? 'Check your details, or try again later if locked.' : '', 'Sign-in failed');
+        } else if (res.status === 422) {
+          showError('درج کی گئی معلومات درست نہیں۔', text, 'Validation');
+        } else {
+          showError('لاگ ان نہیں ہو سکا۔', text || ('HTTP ' + res.status), 'Sign-in failed');
+        }
+        submitEl.disabled = false;
+        submitEl.querySelector('.latin').textContent = 'Sign in';
+      })
+      .catch(function () {
+        showError('سرور سے رابطہ نہیں ہو سکا۔', 'Could not reach the server.', 'Network');
+        submitEl.disabled = false;
+        submitEl.querySelector('.latin').textContent = 'Sign in';
+      });
+  });
+
+  emailEl.focus();
+})();
+</script>
+</body>
+</html>

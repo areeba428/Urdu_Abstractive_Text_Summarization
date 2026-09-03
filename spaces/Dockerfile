@@ -22,6 +22,12 @@ ENV PYTHONUNBUFFERED=1 \
 # (e.g. /data when using HF persistent storage).
 ENV UATS_MODEL_DIR=/app/data
 
+# Auth database (email/password accounts + sessions). Defaults to
+# /app/data/accounts.db, which is EPHEMERAL: accounts are lost on every restart
+# unless you enable persistent storage and point AUTH_DB_PATH at the mounted
+# volume (see spaces/README.md). Uncomment to bake in that default:
+# ENV AUTH_DB_PATH=/data/accounts.db
+
 WORKDIR /app
 
 # 1) CPU-only torch FIRST from the PyTorch CPU index, otherwise pip pulls the

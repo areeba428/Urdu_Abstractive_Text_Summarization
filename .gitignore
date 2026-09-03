@@ -31,6 +31,11 @@ _ext*.log
 .env.*
 !.env.example
 
+# --- Auth database (SQLite accounts + sessions) ---
+# Regenerated automatically on first signup; never commit real user data.
+# Override the location with AUTH_DB_PATH (e.g. HF persistent storage).
+data/
+
 # --- Interrupted downloads ---
 *.crdownload
 *.part
