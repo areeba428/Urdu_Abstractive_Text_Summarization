@@ -1,0 +1,4 @@
+# Route large binary model artifacts through Git LFS if they are ever added.
+# (The trained best_model.pt currently lives outside this repo in UATS_MODEL_DIR.)
+*.pt filter=lfs diff=lfs merge=lfs -text
+*.npy filter=lfs diff=lfs merge=lfs -text

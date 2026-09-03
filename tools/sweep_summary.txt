@@ -1,0 +1,54 @@
+============================================================================================
+TASK #15  DECODING-PARAMETER SWEEP  —  RESULTS SUMMARY
+============================================================================================
+model: best_model.pt  vocab=46000  params=133,675,056  device=cpu
+pairs: 30   coarse subset: [0, 2, 5, 7, 10, 12, 15, 17, 20, 22, 25, 27]
+ranking: combined = 0.4*ROUGE1 + 0.2*ROUGE2 + 0.4*ROUGEL (higher better); tie-break lower repetition
+total runtime: 461.3s (7.7 min)
+
+--- BASELINE (all 30) vs BEST (all 30) ---
+config                                            R1      R2      RL    comb     rep   t(s)
+-------------------------------------------------------------------------------------------
+BASELINE {"beam_size": 4, "length_alpha": 0.9, "repetition_penalty": 1.3, "no_repeat_ngram": 3, "coverage_beta": 0.5, "min_summary_words": 6}  0.3289  0.1715  0.3133  0.2912  0.0526   1.96
+{"length_alpha": 0.6}                         0.3290  0.1715  0.3134  0.2913  0.0526   1.94
+
+delta (best - baseline):  dR1=+0.0001  dR2=+0.0000  dRL=+0.0001  drep=+0.0000
+
+--- COARSE COORDINATE SWEEP (subset of 12) — ranked by combined score ---
+config                                            R1      R2      RL    comb     rep   t(s)
+-------------------------------------------------------------------------------------------
+BASELINE {"beam_size": 4, "length_alpha": 0.9, "repetition_penalty": 1.3, "no_repeat_ngram": 3, "coverage_beta": 0.5, "min_summary_words": 6}  0.3912  0.2193  0.3743  0.3501  0.0400   1.77
+{"length_alpha": 0.6}                         0.3912  0.2193  0.3743  0.3501  0.0400   1.78
+{"no_repeat_ngram": 4}                        0.3912  0.2193  0.3743  0.3501  0.0400   1.78
+{"coverage_beta": 0.0}                        0.3912  0.2193  0.3743  0.3501  0.0400   1.78
+{"coverage_beta": 1.0}                        0.3912  0.2193  0.3743  0.3501  0.0400   1.78
+{"length_alpha": 1.2}                         0.3907  0.2191  0.3739  0.3497  0.0341   1.76
+{"beam_size": 6}                              0.3747  0.2190  0.3634  0.3390  0.0462   2.19
+{"no_repeat_ngram": 2}                        0.3669  0.2001  0.3503  0.3269  0.0400   1.80
+{"repetition_penalty": 1.6}                   0.3658  0.1995  0.3491  0.3259  0.0285   1.80
+{"repetition_penalty": 2.0}                   0.3629  0.1944  0.3514  0.3246  0.0122   1.77
+{"beam_size": 8}                              0.3612  0.2000  0.3443  0.3222  0.0507   2.60
+{"repetition_penalty": 1.0}                   0.3544  0.1952  0.3367  0.3155  0.0470   1.80
+
+--- FINE PASS (top-3 coarse winners, all 30) ---
+config                                            R1      R2      RL    comb     rep   t(s)
+-------------------------------------------------------------------------------------------
+BASELINE {"beam_size": 4, "length_alpha": 0.9, "repetition_penalty": 1.3, "no_repeat_ngram": 3, "coverage_beta": 0.5, "min_summary_words": 6}  0.3289  0.1715  0.3133  0.2912  0.0526   1.96
+{"length_alpha": 0.6}                         0.3290  0.1715  0.3134  0.2913  0.0526   1.94
+{"no_repeat_ngram": 4}                        0.3289  0.1715  0.3133  0.2912  0.0526   1.94
+
+--- BEST-OF-3 UNSUPERVISED RERANKING (all 30) ---
+proxy: score = (1 - repetition_rate) + [1 if 8<=words<=20 else 0] + lexical_coverage(summary, source)
+single best config             R1=0.3290 R2=0.1715 RL=0.3134 comb=0.2913
+proxy reranker (best-of-3)     R1=0.3289 R2=0.1715 RL=0.3133 comb=0.2912
+oracle best-of-3               R1=0.3290 R2=0.1715 RL=0.3134 comb=0.2913
+reranker beats single best config? NO (delta comb=-0.0001)
+
+--- RECOMMENDED PARAMETER SET (best on all 30) ---
+   beam_size            = 4
+   length_alpha         = 0.6
+   repetition_penalty   = 1.3
+   no_repeat_ngram      = 3
+   coverage_beta        = 0.5
+   min_summary_words    = 6
+============================================================================================

@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>خلاصہ نگار — Urdu Abstractive Summarization</title>
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ece2ce">
+<meta name="description" content="Coverage-GRU Urdu abstractive summarization — paste an Urdu article, get a headline.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2317130c'/%3E%3Ccircle cx='32' cy='32' r='21' fill='none' stroke='%23b03a1c' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='15' fill='none' stroke='%23a8862f' stroke-width='1' stroke-dasharray='3 3'/%3E%3Ctext x='32' y='41' font-size='22' text-anchor='middle' fill='%23f5eddd' font-family='serif'%3E%D8%AE%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,900;1,9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   A broadsheet, not a dashboard.
+   Aged newsprint stock, letterpress ink, rubricated vermilion,
+   manuscript emerald. The summary is set as a headline plate.
+   ============================================================ */
+:root{
+  --paper:      #ece2ce;
+  --paper-hi:   #f5eddd;
+  --paper-lo:   #ddcfb4;
+  --ink:        #17130c;
+  --ink-2:      #2e2819;
+  --ink-soft:   #5d5340;
+  --vermilion:  #b03a1c;
+  --vermilion-2:#8d2c14;
+  --emerald:    #1f5c46;
+  --gold:       #a8862f;
+
+  --nastaliq: "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", "Awami Nastaliq", serif;
+  --naskh:    "Noto Naskh Arabic", "Noto Nastaliq Urdu", serif;
+  --display:  "Fraunces", "Times New Roman", serif;
+  --mono:     "IBM Plex Mono", ui-monospace, "Courier New", monospace;
+
+  --rule: 1px solid rgba(23,19,12,.28);
+  --shadow-press: 0 1px 0 rgba(245,237,221,.6), 0 12px 26px -18px rgba(23,19,12,.9);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh;
+  color:var(--ink);
+  font-family:var(--naskh);
+  background-color:var(--paper);
+  background-image:
+    /* soft light from the upper right, like a desk lamp on newsprint */
+    radial-gradient(120% 80% at 88% -10%, rgba(255,252,242,.85), transparent 60%),
+    radial-gradient(90% 70% at 5% 105%, rgba(120,96,52,.22), transparent 65%),
+    /* faint broadsheet column gutters */
+    repeating-linear-gradient(to left, transparent 0 118px, rgba(23,19,12,.045) 118px 119px),
+    linear-gradient(178deg, var(--paper-hi), var(--paper) 38%, var(--paper-lo));
+  -webkit-font-smoothing:antialiased;
+}
+/* paper grain */
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:60;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23n)' opacity='0.34'/%3E%3C/svg%3E");
+}
+/* vignette + edge wear */
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:59;
+  box-shadow:inset 0 0 180px rgba(60,44,20,.34), inset 0 0 40px rgba(60,44,20,.16);
+}
+
+.ltr{direction:ltr;unicode-bidi:isolate}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+.wrap{max-width:1440px;margin:0 auto;padding:26px clamp(14px,3vw,44px) 40px}
+
+/* ---------------- masthead ---------------- */
+.masthead{position:relative;padding-bottom:14px}
+.masthead .kicker{
+  display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;
+  color:var(--ink-soft);
+}
+.kicker .edition{color:var(--vermilion);letter-spacing:.2em}
+.nameplate{
+  display:grid;grid-template-columns:auto 1fr auto;align-items:end;gap:clamp(12px,2.4vw,34px);
+  margin:10px 0 12px;
+}
+.title{
+  margin:0;font-family:var(--nastaliq);font-weight:700;
+  font-size:clamp(46px,8.6vw,116px);line-height:1.5;
+  letter-spacing:0;
+  text-shadow:0 1px 0 rgba(245,237,221,.7), 0 2px 1px rgba(23,19,12,.14);
+}
+.title .rubric{color:var(--vermilion)}
+.title-latin{
+  font-family:var(--display);font-weight:900;font-style:italic;
+  font-size:clamp(13px,1.5vw,19px);line-height:1.15;letter-spacing:-.01em;
+  color:var(--ink-2);opacity:.86;max-width:26ch;padding-bottom:.9em;
+}
+.nameplate .seal{
+  justify-self:end;padding-bottom:1.1em;text-align:center;
+}
+.seal-ring{
+  width:clamp(74px,8vw,104px);aspect-ratio:1;border-radius:50%;
+  border:2px solid var(--vermilion);
+  display:grid;place-items:center;position:relative;
+  color:var(--vermilion);
+  box-shadow:inset 0 0 0 3px rgba(176,58,28,.12);
+  transform:rotate(-7deg);
+}
+.seal-ring::before{
+  content:"";position:absolute;inset:6px;border-radius:50%;
+  border:1px dashed rgba(176,58,28,.55);
+  animation:spin 44s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.seal-ring b{font-family:var(--nastaliq);font-size:clamp(15px,1.7vw,21px);font-weight:700;line-height:1.9}
+.seal-ring small{
+  position:absolute;bottom:-19px;left:50%;transform:translateX(-50%);
+  font-family:var(--mono);font-size:8.5px;letter-spacing:.2em;color:var(--ink-soft);white-space:nowrap;
+}
+
+.rules{border-top:3px double rgba(23,19,12,.6);border-bottom:var(--rule);height:5px}
+.rules.thin{border-top:var(--rule);border-bottom:none;height:0;margin-top:3px}
+
+/* ---------------- status bar ---------------- */
+.statusbar{
+  display:flex;flex-wrap:wrap;gap:6px 22px;align-items:center;justify-content:space-between;
+  padding:9px 2px 11px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-soft);border-bottom:var(--rule);
+}
+.statusbar .led{display:inline-flex;align-items:center;gap:7px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 3px rgba(168,134,47,.2)}
+.dot.ok{background:var(--emerald);box-shadow:0 0 0 3px rgba(31,92,70,.2);animation:pulse 2.6s ease-in-out infinite}
+.dot.bad{background:var(--vermilion);box-shadow:0 0 0 3px rgba(176,58,28,.2)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.42}}
+.statusbar b{color:var(--ink);font-weight:600}
+
+/* ---------------- press floor ---------------- */
+.press{
+  display:grid;grid-template-columns:minmax(0,1.16fr) minmax(0,.84fr);
+  gap:clamp(16px,2.2vw,34px);margin-top:22px;align-items:start;
+}
+@media (max-width:1040px){.press{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:760px){
+  .nameplate{grid-template-columns:minmax(0,1fr);align-items:start;gap:6px}
+  .nameplate .seal{justify-self:start;padding-bottom:0;margin-top:6px}
+  .title-latin{max-width:none;padding-bottom:.2em}
+  .seal-ring small{position:static;display:block;transform:none;margin-top:6px}
+  .statusbar{font-size:9.5px;gap:6px 12px}
+  .actions .btn{flex:1 1 100%}
+}
+
+.panel-head{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  border-bottom:2px solid var(--ink);padding-bottom:6px;margin-bottom:12px;
+}
+.panel-head h2{
+  margin:0;font-family:var(--nastaliq);font-weight:700;font-size:clamp(21px,2.4vw,30px);line-height:1.8;
+}
+.panel-head .tag{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);
+  white-space:nowrap;
+}
+
+/* --- article sheet --- */
+.sheet{position:relative}
+.sheet::before{ /* vermilion margin rule, right-hand side in RTL */
+  content:"";position:absolute;top:8px;bottom:8px;right:-11px;width:1px;
+  background:linear-gradient(to bottom,transparent,var(--vermilion) 12%,var(--vermilion) 88%,transparent);
+  opacity:.55;
+}
+textarea#article{
+  display:block;width:100%;min-height:340px;resize:vertical;
+  padding:14px 20px 14px 16px;
+  font-family:var(--naskh);font-size:17.5px;line-height:38px;color:var(--ink-2);
+  background-color:rgba(250,245,234,.72);
+  /* the ruled baseline must start where the text starts, not where the padding does */
+  background-image:repeating-linear-gradient(to bottom,transparent 0 37px,rgba(23,19,12,.11) 37px 38px);
+  background-origin:content-box;
+  border:1px solid rgba(23,19,12,.34);
+  border-radius:2px;
+  box-shadow:var(--shadow-press), inset 0 0 40px rgba(168,134,47,.07);
+  outline:none;transition:border-color .25s, box-shadow .25s, background-color .25s;
+  direction:rtl;
+}
+textarea#article::placeholder{color:rgba(93,83,64,.62)}
+textarea#article:focus{
+  border-color:var(--vermilion);background-color:rgba(253,249,241,.94);
+  box-shadow:var(--shadow-press), 0 0 0 3px rgba(176,58,28,.13);
+}
+.sheet-foot{
+  display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;justify-content:space-between;
+  margin-top:10px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--ink-soft);
+  text-transform:uppercase;
+}
+.counters{display:flex;gap:16px;flex-wrap:wrap}
+.counters b{color:var(--ink);font-weight:600;font-size:12.5px}
+
+/* --- mode switch: two printed keys --- */
+.switch{display:inline-flex;border:1px solid rgba(23,19,12,.4);border-radius:2px;overflow:hidden;background:rgba(250,245,234,.6)}
+.switch input{position:absolute;opacity:0;width:0;height:0}
+.switch label{
+  cursor:pointer;padding:7px 15px 8px;display:flex;flex-direction:column;gap:2px;align-items:center;
+  font-family:var(--naskh);font-size:14px;line-height:1.5;color:var(--ink-soft);
+  border-inline-start:1px solid rgba(23,19,12,.22);
+  transition:background .22s,color .22s,transform .12s;user-select:none;
+}
+.switch label:first-of-type{border-inline-start:none}
+.switch label span{font-family:var(--mono);font-size:8.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.8}
+.switch input:checked + label{background:var(--ink);color:var(--paper-hi)}
+.switch input:checked + label span{color:var(--vermilion);opacity:1}
+.switch input:focus-visible + label{outline:2px solid var(--vermilion);outline-offset:-3px}
+.switch label:hover{background:rgba(23,19,12,.08)}
+.switch input:checked + label:hover{background:var(--ink-2)}
+
+/* --- buttons --- */
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
+button{font:inherit;cursor:pointer}
+.btn{
+  position:relative;border:1px solid var(--ink);border-radius:2px;
+  padding:11px 22px 12px;background:var(--ink);color:var(--paper-hi);
+  font-family:var(--nastaliq);font-size:17px;font-weight:600;line-height:2;
+  letter-spacing:0;box-shadow:0 3px 0 var(--vermilion-2), 0 12px 20px -14px rgba(23,19,12,1);
+  transition:transform .1s, box-shadow .1s, background .25s;
+}
+.btn:hover:not(:disabled){background:var(--ink-2)}
+.btn:active:not(:disabled){transform:translateY(3px);box-shadow:0 0 0 var(--vermilion-2), 0 6px 12px -10px rgba(23,19,12,1)}
+.btn:disabled{opacity:.42;cursor:not-allowed;box-shadow:none}
+.btn .latin{display:block;font-family:var(--mono);font-size:8.5px;letter-spacing:.24em;color:var(--vermilion);line-height:1;margin-top:3px}
+.btn:focus-visible{outline:2px solid var(--vermilion);outline-offset:3px}
+.btn-ghost{
+  background:transparent;color:var(--ink);border:1px solid rgba(23,19,12,.45);
+  font-family:var(--naskh);font-size:15px;padding:9px 16px;border-radius:2px;
+  box-shadow:none;transition:background .22s,border-color .22s,color .22s;
+}
+.btn-ghost:hover{background:rgba(176,58,28,.1);border-color:var(--vermilion);color:var(--vermilion-2)}
+.btn-ghost:disabled{opacity:.4;cursor:not-allowed}
+.hint{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--ink-soft);text-transform:uppercase}
+.hint.warn{color:var(--vermilion);font-weight:500}
+
+/* ---------------- summary plate (ink block) ---------------- */
+.plate{
+  position:relative;background:var(--ink);color:var(--paper-hi);
+  border-radius:2px;padding:clamp(18px,2.4vw,30px) clamp(16px,2.2vw,28px) 20px;
+  box-shadow:0 26px 44px -26px rgba(23,19,12,.95), inset 0 0 0 1px rgba(245,237,221,.14);
+  overflow:hidden;min-height:340px;display:flex;flex-direction:column;
+}
+.plate::before{ /* engraved halftone on the ink block */
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.14;
+  background-image:radial-gradient(rgba(245,237,221,.7) .6px, transparent .7px);
+  background-size:5px 5px;
+}
+.plate::after{ /* vermilion printer's margin at the top */
+  content:"";position:absolute;top:0;left:0;right:0;height:4px;
+  background:linear-gradient(to left,var(--vermilion),var(--gold) 45%,var(--emerald));
+}
+.plate-head{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  border-bottom:1px solid rgba(245,237,221,.26);padding-bottom:8px;margin-bottom:14px;position:relative;
+}
+.plate-head h2{margin:0;font-family:var(--nastaliq);font-size:clamp(19px,2.1vw,26px);font-weight:700;line-height:1.8;color:#f7efdf}
+.plate-head .tag{font-family:var(--mono);font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold)}
+
+.summary{
+  position:relative;flex:1;font-family:var(--nastaliq);font-weight:600;
+  font-size:clamp(22px,2.6vw,33px);line-height:2.25;color:#fbf5e8;
+  text-shadow:0 0 22px rgba(176,58,28,.16);word-spacing:.06em;
+  overflow-wrap:anywhere;
+}
+.summary .w{display:inline-block;opacity:0;transform:translateY(.42em) scale(.97);animation:ink .5s cubic-bezier(.2,.8,.25,1) forwards}
+@keyframes ink{to{opacity:1;transform:none}}
+.summary .w.hot{color:#f0b28f}
+
+.empty{
+  position:relative;flex:1;display:flex;flex-direction:column;justify-content:center;gap:12px;
+  font-family:var(--naskh);color:rgba(245,237,221,.5);font-size:17px;line-height:2;
+}
+.empty .glyph{
+  font-family:var(--nastaliq);font-size:clamp(40px,7vw,74px);color:rgba(245,237,221,.13);line-height:1.9;
+  text-align:center;
+}
+.empty p{margin:0;text-align:center}
+
+/* composing state */
+.composing{position:relative;flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px}
+.composing .stage{font-family:var(--nastaliq);font-size:clamp(19px,2.3vw,27px);color:#f4ead6;text-align:center;line-height:2.1;min-height:2.4em}
+.press-bar{height:6px;background:rgba(245,237,221,.13);border-radius:1px;overflow:hidden;position:relative}
+.press-bar i{
+  position:absolute;inset:0;display:block;
+  background:repeating-linear-gradient(115deg,var(--vermilion) 0 14px,var(--gold) 14px 22px,var(--emerald) 22px 34px);
+  animation:feed 1.1s linear infinite;
+}
+@keyframes feed{to{transform:translateX(-34px)}}
+.composing .ticker{font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);text-align:center}
+
+/* error stamp */
+.error{
+  position:relative;margin-top:14px;border:2px solid var(--vermilion);border-radius:2px;
+  background:rgba(176,58,28,.12);color:#ffd9cb;padding:12px 14px;
+  font-family:var(--naskh);font-size:16px;line-height:1.9;animation:shake .4s ease;
+}
+.error b{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--vermilion);margin-bottom:5px}
+@keyframes shake{0%,100%{transform:none}20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+
+/* --- specimen stats --- */
+.specimen{margin-top:18px;border-top:1px solid rgba(245,237,221,.24);padding-top:14px;position:relative}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:12px 8px}
+.stat{display:flex;flex-direction:column;gap:3px}
+.stat u{
+  font-family:var(--mono);font-size:8.5px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--gold);text-decoration:none;
+}
+.stat b{font-family:var(--display);font-weight:900;font-size:clamp(19px,2vw,26px);line-height:1;color:#fbf5e8}
+.stat b em{font-style:normal;font-family:var(--mono);font-size:11px;font-weight:500;color:rgba(245,237,221,.55);margin-inline-start:3px}
+.ratio{margin-top:14px}
+.ratio-top{display:flex;justify-content:space-between;font-family:var(--mono);font-size:8.5px;letter-spacing:.18em;text-transform:uppercase;color:rgba(245,237,221,.6);margin-bottom:6px}
+.ratio-track{height:9px;background:rgba(245,237,221,.12);position:relative;overflow:hidden;border-radius:1px}
+.ratio-track i{position:absolute;top:0;bottom:0;right:0;width:0;background:linear-gradient(to left,var(--vermilion),var(--gold));transition:width 1.1s cubic-bezier(.2,.8,.25,1)}
+.ratio-track s{position:absolute;top:0;bottom:0;right:0;left:0;text-decoration:none;
+  background-image:repeating-linear-gradient(to left,transparent 0 3px,rgba(23,19,12,.4) 3px 4px)}
+.flags{display:flex;flex-wrap:wrap;gap:7px;margin-top:13px}
+.flag{
+  font-family:var(--mono);font-size:8.5px;letter-spacing:.18em;text-transform:uppercase;
+  border:1px solid rgba(245,237,221,.34);color:rgba(245,237,221,.78);padding:4px 9px;border-radius:1px;
+}
+.flag.warn{border-color:var(--vermilion);color:#f2b39c;background:rgba(176,58,28,.2)}
+.flag.good{border-color:var(--emerald);color:#a8d6c2;background:rgba(31,92,70,.25)}
+
+/* -------- transparency: guidance, sample badge, warning, input echo -------- */
+.guidance{
+  margin:10px 0 0;padding:10px 14px;border-radius:2px;
+  border:1px solid rgba(168,134,47,.4);border-inline-start:3px solid var(--gold);
+  background:rgba(168,134,47,.09);
+}
+.guidance .ur{display:block;font-family:var(--naskh);font-size:14.5px;line-height:2;color:var(--ink-2)}
+.guidance .en{display:block;direction:ltr;text-align:left;font-family:var(--mono);font-size:10px;line-height:1.7;letter-spacing:.02em;color:var(--ink-soft);margin-top:4px}
+
+.sample-badge{
+  align-self:center;font-family:var(--mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+  background:var(--emerald);color:#eaf5ef;padding:4px 10px;border-radius:2px;white-space:nowrap;
+  box-shadow:0 3px 8px -4px rgba(23,19,12,.85);animation:rise .3s ease;
+}
+
+.warn-block{
+  position:relative;margin:0 0 14px;padding:12px 15px;border-radius:2px;
+  border:1px solid var(--gold);border-inline-start:4px solid var(--gold);
+  background:rgba(168,134,47,.18);color:#ffe9b8;
+  font-family:var(--naskh);font-size:15px;line-height:2;
+}
+.warn-block b{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
+.warn-block .en{display:block;direction:ltr;text-align:left;font-family:var(--mono);font-size:10.5px;line-height:1.7;letter-spacing:.02em;color:rgba(255,233,184,.82);margin-top:5px}
+
+.echo{
+  position:relative;margin-top:14px;padding:10px 13px;border-radius:2px;
+  border:1px dashed rgba(168,134,47,.65);background:rgba(168,134,47,.12);
+  font-family:var(--naskh);font-size:14px;line-height:2;color:#f0e6d2;
+}
+.echo b{font-family:var(--mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-inline-end:6px}
+.echo .q{color:#fbf5e8}
+.echo .meta{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:rgba(240,230,210,.72)}
+
+/* ---------------- colophon ---------------- */
+.colophon{margin-top:34px;border-top:3px double rgba(23,19,12,.55);padding-top:14px}
+.colophon-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px 26px}
+.colophon h3{
+  margin:0 0 5px;font-family:var(--mono);font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--vermilion);
+}
+.colophon p{margin:0;font-family:var(--mono);font-size:11px;line-height:1.85;color:var(--ink-soft);letter-spacing:.02em}
+.colophon .urdu{font-family:var(--naskh);font-size:15px;line-height:1.95;color:var(--ink-2);letter-spacing:0}
+.folio{
+  margin-top:18px;display:flex;justify-content:space-between;align-items:center;gap:12px;
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);
+  border-top:var(--rule);padding-top:9px;
+}
+
+/* ---------------- entrance choreography ---------------- */
+.rise{opacity:0;transform:translateY(16px);animation:rise .78s cubic-bezier(.2,.75,.25,1) forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+.d1{animation-delay:.05s}.d2{animation-delay:.14s}.d3{animation-delay:.24s}
+.d4{animation-delay:.34s}.d5{animation-delay:.44s}.d6{animation-delay:.56s}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+  .rise,.summary .w{opacity:1!important;transform:none!important}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ masthead ============ -->
+  <header class="masthead">
+    <div class="kicker rise d1">
+      <span class="ltr">Urdu&nbsp;Abstractive&nbsp;Summarization · 100k&nbsp;News&nbsp;Pairs</span>
+      <span class="edition ltr" id="edition">Vol. II — Coverage GRU</span>
+    </div>
+
+    <div class="nameplate">
+      <h1 class="title rise d2">خلاصہ<span class="rubric">&nbsp;نگار</span></h1>
+      <div class="title-latin rise d3 ltr">
+        A bidirectional&nbsp;GRU encoder, a coverage-attended decoder,
+        and forty-six thousand Urdu words &mdash; reading your article
+        so you don&rsquo;t have to.
+      </div>
+      <div class="seal rise d3">
+        <div class="seal-ring">
+          <b>خلاصہ</b>
+          <small class="ltr" id="seal-meta">loading</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="rules rise d3"></div>
+    <div class="rules thin rise d3"></div>
+
+    <div class="statusbar rise d4">
+      <span class="led"><i class="dot" id="dot"></i><span id="model-status">ماڈل لوڈ ہو رہا ہے…</span></span>
+      <span class="ltr" id="model-facts">checkpoint · vocab · stanza</span>
+    </div>
+  </header>
+
+  <!-- ============ press floor ============ -->
+  <main class="press">
+
+    <!-- ---- article column ---- -->
+    <section class="sheet rise d4">
+      <div class="panel-head">
+        <h2>مضمون</h2>
+        <span class="sample-badge" id="sample-badge" hidden>نمونہ · sample loaded</span>
+        <span class="tag ltr">Source&nbsp;text · max&nbsp;400&nbsp;words&nbsp;encoded</span>
+      </div>
+
+      <textarea id="article" spellcheck="false" maxlength="20000"
+        placeholder="یہاں اردو مضمون چسپاں کریں…"
+        aria-label="اردو مضمون"></textarea>
+
+      <p class="guidance" id="guidance">
+        <span class="ur">اردو خبر کا مضمون پیسٹ کریں (کم از کم 200 حروف)۔ انگریزی، سوالات یا عام گفتگو سے عمومی سرخیاں بنیں گی۔</span>
+        <span class="en">Paste an Urdu news article (&ge;200 characters). English, questions, or casual text will produce generic headlines.</span>
+      </p>
+
+      <div class="sheet-foot">
+        <div class="counters">
+          <span>الفاظ <b class="ltr" id="word-count">0</b></span>
+          <span>حروف <b class="ltr" id="char-count">0</b></span>
+        </div>
+        <span class="hint ltr" id="truncation-note"></span>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="go" disabled>خلاصہ بنائیں<span class="latin ltr">Summarize · Ctrl+Enter</span></button>
+        <button class="btn-ghost" id="sample" type="button">نمونہ مضمون</button>
+        <button class="btn-ghost" id="clear" type="button">صاف کریں</button>
+
+        <div class="switch" role="radiogroup" aria-label="Decoding mode">
+          <input type="radio" name="mode" id="mode-beam" value="beam" checked>
+          <label for="mode-beam">شعاعی تلاش<span class="ltr">beam · 4</span></label>
+          <input type="radio" name="mode" id="mode-greedy" value="greedy">
+          <label for="mode-greedy">فوری<span class="ltr">greedy</span></label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- summary plate ---- -->
+    <section class="rise d5">
+      <div class="plate">
+        <div class="plate-head">
+          <h2>خلاصہ</h2>
+          <span class="tag ltr" id="plate-tag">awaiting&nbsp;copy</span>
+        </div>
+
+        <div class="empty" id="empty-state">
+          <div class="glyph">٭</div>
+          <p>مضمون دائیں خانے میں لکھیں اور «خلاصہ بنائیں» دبائیں۔</p>
+          <p class="ltr mono" style="font-size:10px;letter-spacing:.2em;text-transform:uppercase">
+            generated headline-style summary · max 32 words
+          </p>
+        </div>
+
+        <div class="composing" id="composing" hidden>
+          <div class="stage" id="stage">لفظ چنے جا رہے ہیں…</div>
+          <div class="press-bar"><i></i></div>
+          <div class="ticker ltr" id="ticker">decoder running on cpu</div>
+        </div>
+
+        <div class="warn-block" id="warn-block" hidden></div>
+        <div class="summary" id="summary" hidden></div>
+        <div class="echo" id="echo" hidden></div>
+        <div id="error-slot"></div>
+
+        <div class="specimen" id="specimen" hidden>
+          <div class="stats">
+            <div class="stat"><u class="ltr">Source words</u><b class="ltr" id="s-source">—</b></div>
+            <div class="stat"><u class="ltr">Summary words</u><b class="ltr" id="s-summary">—</b></div>
+            <div class="stat"><u class="ltr">Repetition</u><b class="ltr" id="s-rep">—<em>%</em></b></div>
+            <div class="stat"><u class="ltr">Decode time</u><b class="ltr" id="s-time">—<em>s</em></b></div>
+          </div>
+
+          <div class="ratio">
+            <div class="ratio-top"><span class="ltr">Compression</span><span class="ltr" id="s-ratio">—</span></div>
+            <div class="ratio-track"><s></s><i id="ratio-fill"></i></div>
+          </div>
+
+          <div class="flags" id="flags"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ colophon ============ -->
+  <footer class="colophon rise d6">
+    <div class="colophon-grid">
+      <div>
+        <h3 class="ltr">Architecture</h3>
+        <p class="urdu">مشترکہ ایمبیڈنگ + دو رُخی GRU انکوڈر + کوریج اٹینشن ڈی کوڈر</p>
+        <p class="ltr">CoverageGRUSummarizer · 133.7M fp32 params</p>
+      </div>
+      <div>
+        <h3 class="ltr">Dimensions</h3>
+        <p class="ltr">embed 300 · enc hidden 512<br>decoder state 1024 · dropout 0.3</p>
+      </div>
+      <div>
+        <h3 class="ltr">Decoding</h3>
+        <p class="ltr">beam 4 · length α 0.9 · rep 1.3<br>no-repeat 3-gram · coverage β 0.5</p>
+      </div>
+      <div>
+        <h3 class="ltr">Pipeline</h3>
+        <p class="ltr">whitespace → Stanza ur tokenize (≤8k chars)<br>→ 46,000-word stoi → BOS/EOS</p>
+      </div>
+    </div>
+    <div class="folio">
+      <span class="ltr">Set in Noto Nastaliq Urdu, Noto Naskh Arabic, Fraunces &amp; IBM Plex Mono</span>
+      <span class="ltr" id="folio-right">— 1 —</span>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var MAX_SOURCE_WORDS = 400;
+  var MIN_ARTICLE_CHARS = 200;     // server floor: the corpus was filtered to >= 200 chars
+  var MAX_ARTICLE_CHARS = 20000;   // server ceiling: mirrors SummarizeRequest.article
+  var REQUEST_TIMEOUT_MS = 120000; // CPU beam search is slow, but not this slow
+  var HEALTH_RETRY_MS = 2000;
+  var $ = function (id) { return document.getElementById(id); };
+
+  var articleEl = $('article'), goEl = $('go'), sampleEl = $('sample'), clearEl = $('clear');
+  var summaryEl = $('summary'), emptyEl = $('empty-state'), composingEl = $('composing');
+  var specimenEl = $('specimen'), errorSlot = $('error-slot'), plateTag = $('plate-tag');
+  var dotEl = $('dot'), statusEl = $('model-status'), factsEl = $('model-facts');
+  var sealMeta = $('seal-meta'), stageEl = $('stage'), tickerEl = $('ticker');
+  var echoEl = $('echo'), warnEl = $('warn-block'), sampleBadge = $('sample-badge');
+  var busy = false, ready = false, stageTimer = null, elapsedTimer = null, startedAt = 0;
+  var healthTimer = null, healthAttempts = 0, sampleText = null;
+
+  function esc(s) {
+    return String(s).replace(/[<>&"]/g, function (c) {
+      return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c];
+    });
+  }
+  function clearSampleBadge() { sampleText = null; if (sampleBadge) { sampleBadge.hidden = true; } }
+
+  /* ---------- counters ---------- */
+  function words(text) { return text.trim() ? text.trim().split(/\s+/) : []; }
+  function refreshCounts() {
+    var text = articleEl.value;
+    var trimmed = text.trim();
+    var n = words(text).length;
+    var note = $('truncation-note');
+    $('word-count').textContent = n.toLocaleString('en-US');
+    $('char-count').textContent = text.length.toLocaleString('en-US') + ' / ' +
+      MAX_ARTICLE_CHARS.toLocaleString('en-US');
+
+    if (trimmed.length && trimmed.length < MIN_ARTICLE_CHARS) {
+      note.textContent = 'needs at least ' + MIN_ARTICLE_CHARS + ' characters — ' + trimmed.length + ' so far';
+      note.classList.add('warn');
+    } else if (n > MAX_SOURCE_WORDS - 2) {
+      note.textContent = 'only the first ' + (MAX_SOURCE_WORDS - 2) + ' words reach the encoder';
+      note.classList.remove('warn');
+    } else {
+      note.textContent = '';
+      note.classList.remove('warn');
+    }
+    goEl.disabled = busy || !ready || trimmed.length < MIN_ARTICLE_CHARS;
+  }
+  articleEl.addEventListener('input', function () { clearSampleBadge(); refreshCounts(); });
+
+  /* ---------- mode ---------- */
+  function currentMode() {
+    var inputs = document.getElementsByName('mode');
+    for (var i = 0; i < inputs.length; i++) { if (inputs[i].checked) { return inputs[i].value; } }
+    return 'beam';
+  }
+
+  /* ---------- health: probe, and keep probing until the model is up ---------- */
+  function markNotReady(statusUrdu, factsLatin) {
+    ready = false;
+    dotEl.className = 'dot';
+    statusEl.textContent = statusUrdu;
+    factsEl.textContent = factsLatin;
+    sealMeta.textContent = 'retrying';
+    goEl.disabled = true;
+  }
+  function health() {
+    healthAttempts++;
+    fetch('/health', { cache: 'no-store' })
+      .then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) { throw Object.assign(new Error('loading'), { loading: true, status: r.status }); }
+          return j;
+        });
+      })
+      .then(function (j) {
+        ready = true;
+        clearTimeout(healthTimer); healthTimer = null;
+        dotEl.className = 'dot ok';
+        statusEl.textContent = 'ماڈل تیار ہے';
+        factsEl.textContent = j.vocab_size.toLocaleString('en-US') + ' words · loaded in ' + j.startup_seconds + 's';
+        sealMeta.textContent = 'ready';
+        $('folio-right').textContent = 'beam ' + j.beam_size + ' · rep ' + j.repetition_penalty + ' · ngram ' + j.no_repeat_ngram;
+        refreshCounts();
+      })
+      .catch(function (err) {
+        // 503 = still loading the 510 MB checkpoint; anything else = server not
+        // reachable yet. Either way: never give up, just re-probe.
+        var loading = !!(err && err.loading);
+        markNotReady(
+          loading ? 'ماڈل لوڈ ہو رہا ہے…' : 'سرور سے رابطہ نہیں — دوبارہ کوشش',
+          'retrying in ' + (HEALTH_RETRY_MS / 1000) + 's · attempt ' + healthAttempts +
+            (loading ? ' · model loading' : ' · unreachable')
+        );
+        clearTimeout(healthTimer);
+        healthTimer = setTimeout(health, HEALTH_RETRY_MS);
+      });
+  }
+
+  /* ---------- composing theatre ---------- */
+  var STAGES = [
+    ['لفظ چنے جا رہے ہیں…', 'stanza tokenizer → stoi'],
+    ['انکوڈر مضمون پڑھ رہا ہے…', 'bidirectional gru · 400 steps'],
+    ['توجہ کا نقشہ بن رہا ہے…', 'bahdanau + coverage attention'],
+    ['دہرائی کاٹی جا رہی ہے…', 'repetition 1.3 · no-repeat 3-gram'],
+    ['سرخی ترتیب دی جا رہی ہے…', 'length normalisation α 0.9']
+  ];
+  function startComposing(mode) {
+    emptyEl.hidden = true; summaryEl.hidden = true; specimenEl.hidden = true;
+    if (echoEl) { echoEl.hidden = true; }
+    if (warnEl) { warnEl.hidden = true; }
+    errorSlot.innerHTML = ''; composingEl.hidden = false;
+    plateTag.textContent = mode === 'greedy' ? 'greedy decode' : 'beam search · width 4';
+    var i = 0;
+    startedAt = performance.now();
+    var paint = function () {
+      var stage = STAGES[i % STAGES.length];
+      stageEl.textContent = stage[0];
+      tickerEl.textContent = stage[1] + ' · ' + ((performance.now() - startedAt) / 1000).toFixed(1) + 's';
+      i++;
+    };
+    paint();
+    stageTimer = setInterval(paint, 2600);
+    elapsedTimer = setInterval(function () {
+      tickerEl.textContent = 'decoding on cpu · ' + ((performance.now() - startedAt) / 1000).toFixed(1) + 's';
+    }, 200);
+  }
+  function stopComposing() {
+    clearInterval(stageTimer); clearInterval(elapsedTimer);
+    stageTimer = elapsedTimer = null;
+    composingEl.hidden = true;
+  }
+
+  /* ---------- rendering ---------- */
+  function showSummary(text) {
+    summaryEl.hidden = false; summaryEl.innerHTML = '';
+    var list = words(text);
+    var seen = Object.create(null);
+    list.forEach(function (w, i) {
+      var span = document.createElement('span');
+      span.className = 'w' + (seen[w] ? ' hot' : '');
+      seen[w] = true;
+      span.textContent = w;
+      span.style.animationDelay = (i * 62) + 'ms';
+      summaryEl.appendChild(span);
+      summaryEl.appendChild(document.createTextNode(' '));
+    });
+    if (!list.length) {
+      summaryEl.textContent = '— خالی خلاصہ —';
+    }
+  }
+  function showStats(d) {
+    $('s-source').textContent = d.source_words.toLocaleString('en-US');
+    $('s-summary').textContent = d.summary_words.toLocaleString('en-US');
+    $('s-rep').innerHTML = (d.repetition_rate * 100).toFixed(1) + '<em>%</em>';
+    $('s-time').innerHTML = (d.elapsed_seconds || 0).toFixed(2) + '<em>s</em>';
+
+    var ratio = d.source_words ? 1 - (d.summary_words / d.source_words) : 0;
+    $('s-ratio').textContent = (ratio * 100).toFixed(1) + '% reduction · ' +
+      (d.source_words ? (d.source_words / Math.max(d.summary_words, 1)).toFixed(1) : '0') + ':1';
+    $('ratio-fill').style.width = Math.max(0, Math.min(100, ratio * 100)).toFixed(1) + '%';
+
+    var flags = [];
+    flags.push('<span class="flag good ltr">' + (d.mode === 'greedy' ? 'greedy' : 'beam 4') + '</span>');
+    flags.push(d.truncated_source
+      ? '<span class="flag warn ltr">source truncated at ' + MAX_SOURCE_WORDS + '</span>'
+      : '<span class="flag ltr">full source encoded</span>');
+    flags.push(d.repetition_rate > 0.3
+      ? '<span class="flag warn ltr">high repetition</span>'
+      : '<span class="flag good ltr">fluency ok</span>');
+    if (d.summary_words < 6) { flags.push('<span class="flag warn ltr">below 6-word minimum</span>'); }
+    $('flags').innerHTML = flags.join('');
+    specimenEl.hidden = false;
+  }
+  function showError(message, label) {
+    errorSlot.innerHTML = '<div class="error"><b class="ltr">' + (label || 'Error') + '</b>' +
+      String(message).replace(/[<>&]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]; }) +
+      '</div>';
+    plateTag.textContent = 'failed';
+  }
+  // Prove to the user that the summary came from THEIR text, not a cached sample.
+  function showEcho(d) {
+    if (!echoEl) { return; }
+    var first = d && d.received_first_words;
+    if (!first) { echoEl.hidden = true; return; }
+    echoEl.innerHTML = '<b class="ltr">✓ Summarized your text</b> «<span class="q">' +
+      esc(first) + '…»</span> <span class="meta ltr">(' +
+      (d.source_words || 0).toLocaleString('en-US') + ' words received)</span>';
+    echoEl.hidden = false;
+  }
+  // Amber notice when most of the input was outside the Urdu-news vocabulary.
+  function showWarning(text) {
+    if (!warnEl) { return; }
+    var parts = String(text).split(' / ');
+    var html = '<b class="ltr">⚠ Out-of-vocabulary input</b>';
+    if (parts.length >= 2) {
+      html += '<span>' + esc(parts.slice(1).join(' / ')) + '</span>' +
+              '<span class="en">' + esc(parts[0]) + '</span>';
+    } else {
+      html += '<span>' + esc(text) + '</span>';
+    }
+    warnEl.innerHTML = html;
+    warnEl.hidden = false;
+  }
+
+  /* ---------- request ---------- */
+  function run() {
+    if (busy) { return; }
+    var article = articleEl.value.trim();
+    if (article.length < MIN_ARTICLE_CHARS) { return; }
+    var mode = currentMode();
+    busy = true; goEl.disabled = true; sampleEl.disabled = true; clearEl.disabled = true;
+    startComposing(mode);
+
+    // CPU decoding can take a while, but nothing legitimate takes two minutes:
+    // abort so the UI can never wedge in the composing state.
+    var controller = typeof AbortController === 'function' ? new AbortController() : null;
+    var timeoutId = controller ? setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS) : null;
+
+    fetch('/summarize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ article: article, mode: mode }),
+      signal: controller ? controller.signal : undefined
+    })
+      .then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) {
+            // FastAPI validation errors (422) send `detail` as an ARRAY.
+            var msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail || ('HTTP ' + r.status));
+            throw Object.assign(new Error(msg), { status: r.status });
+          }
+          return j;
+        }, function () {
+          throw Object.assign(new Error('Unexpected response from the server.'), { status: r.status });
+        });
+      })
+      .then(function (d) {
+        stopComposing();
+        if (d.warning) { showWarning(d.warning); } else if (warnEl) { warnEl.hidden = true; }
+        showSummary(d.summary);
+        showEcho(d);
+        showStats(d);
+        plateTag.textContent = (d.mode === 'greedy' ? 'greedy' : 'beam 4') + ' · ' + d.elapsed_seconds + 's';
+      })
+      .catch(function (err) {
+        stopComposing();
+        emptyEl.hidden = false;
+        if (err && err.name === 'AbortError') {
+          showError('سرور نے ' + (REQUEST_TIMEOUT_MS / 1000) + ' سیکنڈ میں جواب نہیں دیا۔ دوبارہ کوشش کریں یا «فوری» موڈ چنیں۔',
+            'Timeout after ' + (REQUEST_TIMEOUT_MS / 1000) + 's');
+        } else {
+          showError(String((err && err.message) || err), 'HTTP ' + ((err && err.status) || '—'));
+        }
+      })
+      .then(function () {
+        if (timeoutId) { clearTimeout(timeoutId); }
+        busy = false; sampleEl.disabled = false; clearEl.disabled = false; refreshCounts();
+      });
+  }
+
+  goEl.addEventListener('click', run);
+  articleEl.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); }
+  });
+
+  clearEl.addEventListener('click', function () {
+    articleEl.value = ''; clearSampleBadge(); refreshCounts();
+    summaryEl.hidden = true; summaryEl.innerHTML = ''; specimenEl.hidden = true;
+    if (echoEl) { echoEl.hidden = true; }
+    if (warnEl) { warnEl.hidden = true; }
+    errorSlot.innerHTML = ''; emptyEl.hidden = false; plateTag.textContent = 'awaiting copy';
+    articleEl.focus();
+  });
+
+  sampleEl.addEventListener('click', function () {
+    if (busy) { return; }
+    sampleEl.disabled = true;
+    plateTag.textContent = 'fetching sample';
+    fetch('/sample').then(function (r) { return r.json(); })
+      .then(function (j) {
+        articleEl.value = j.article; sampleText = j.article;
+        if (sampleBadge) { sampleBadge.hidden = false; }
+        refreshCounts(); plateTag.textContent = 'sample loaded';
+        articleEl.focus();
+      })
+      .catch(function () { showError('نمونہ مضمون نہیں لایا جا سکا', 'Sample'); })
+      .then(function () { sampleEl.disabled = busy; });
+  });
+
+  refreshCounts();
+  health();
+})();
+</script>
+</body>
+</html>

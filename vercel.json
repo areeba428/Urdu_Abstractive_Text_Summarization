@@ -1,0 +1,32 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/summarize.py": {
+      "maxDuration": 60
+    },
+    "api/health.py": {
+      "maxDuration": 60
+    },
+    "api/sample.py": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/frontend/index.html"
+    },
+    {
+      "source": "/summarize",
+      "destination": "/api/summarize"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/health"
+    },
+    {
+      "source": "/sample",
+      "destination": "/api/sample"
+    }
+  ]
+}

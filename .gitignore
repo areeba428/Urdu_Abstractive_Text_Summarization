@@ -1,0 +1,59 @@
+# --- Python ---
+__pycache__/
+tools/__pycache__/
+backend/__pycache__/
+api/__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Logs & transient run artifacts ---
+*.log
+_t13_server*.log
+_sweep*.log
+_ext*.log
+
+# --- Vercel ---
+.vercel/
+
+# --- Secrets / local env ---
+.env
+.env.*
+!.env.example
+
+# --- Interrupted downloads ---
+*.crdownload
+*.part
+*.tmp
+
+# NOTE: The trained weights (~510 MB best_model.pt) and vocab_100k.json live
+# OUTSIDE this repo, in UATS_MODEL_DIR (default D:\Urdu_text); nothing copies
+# them in, so they are never committed. If weights are ever added on purpose,
+# .gitattributes routes *.pt / *.npy through Git LFS automatically.
+
+# --- OS junk ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# --- Editors ---
+.idea/
+.vscode/
+*.swp
+*.swo
