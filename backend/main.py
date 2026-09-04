@@ -17,6 +17,7 @@ Run from the ``webapp`` directory:
 from __future__ import annotations
 
 import logging
+import sqlite3
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -107,12 +108,36 @@ def summarizer() -> UrduSummarizer:
 SIGNUP_MESSAGE = 'Account created. / اکاؤنٹ بن گیا۔'
 DUPLICATE_MESSAGE = ('This email is already registered — sign in instead. / '
                      'یہ ای میل پہلے سے رجسٹرڈ ہے — براہ کرم لاگ ان کریں۔')
+# C1: bilingual 429 detail for the per-IP token bucket.
+THROTTLE_MESSAGE = ('Too many attempts — please try again later. / '
+                    'بہت زیادہ کوششیں — براہ کرم بعد میں دوبارہ کوشش کریں۔')
+# W8: constant detail when the account store is unreachable.
+ACCOUNT_SERVICE_DOWN = 'Account service unavailable.'
+
+
+def client_ip(request: Request) -> str:
+    """C1: best-effort client IP for the per-IP token bucket.
+
+    Uses the first ``X-Forwarded-For`` value (the real client as seen by the
+    Vercel/HF proxy chain) when present, else the socket peer. CAVEAT: a client
+    talking to the backend directly can SPOOF ``X-Forwarded-For`` to spread its
+    budget across fake IPs; the bucket is a best-effort throttle, not a hard
+    security boundary — the ``(ip, email)`` lockout and the PBKDF2 cost remain the
+    real brute-force defence.
+    """
+    forwarded = request.headers.get('x-forwarded-for')
+    if forwarded:
+        first = forwarded.split(',')[0].strip()
+        if first:
+            return first
+    return request.client.host if request.client else '?'
 
 
 class CredentialsRequest(BaseModel):
     """Shared body for /auth/signup and /auth/login; validation yields 422."""
-    email: str = Field(..., min_length=3, max_length=auth.MAX_EMAIL_LEN,
-                       pattern=auth.EMAIL_PATTERN,
+    # N5: no Pydantic pattern — auth.validate_email (after normalize/strip) is the
+    # single source of truth and yields the bilingual 422. Bounds only guard size.
+    email: str = Field(..., min_length=3, max_length=256,
                        description='Account email (a Gmail or any valid address).')
     password: str = Field(..., min_length=auth.MIN_PASSWORD_LEN,
                           max_length=auth.MAX_PASSWORD_LEN,
@@ -123,7 +148,12 @@ class CredentialsRequest(BaseModel):
 def require_auth(request: Request) -> dict:
     """Dependency: a valid, unexpired ``session`` cookie is required."""
     token = request.cookies.get(auth.SESSION_COOKIE)
-    user = auth.get_user_by_session(token) if token else None
+    try:
+        user = auth.get_user_by_session(token) if token else None
+    except (OSError, sqlite3.Error):
+        # W8: the account store is unreachable — 503, not a misleading 401.
+        logger.exception('Account store unavailable during auth')
+        raise HTTPException(status_code=503, detail=ACCOUNT_SERVICE_DOWN) from None
     if not user:
         raise HTTPException(status_code=401, detail='authentication required')
     return user
@@ -213,34 +243,52 @@ def _session_response(status_code: int, token: str, content: dict) -> JSONRespon
     response.set_cookie(
         auth.SESSION_COOKIE, token,
         max_age=auth.SESSION_MAX_AGE, httponly=True, path='/', samesite='lax',
+        secure=auth.cookie_secure(),   # W3: Secure by default; AUTH_COOKIE_INSECURE=1 opts out
     )
     return response
 
 
 @app.post('/auth/signup', status_code=201)
-def auth_signup(payload: CredentialsRequest):
+def auth_signup(payload: CredentialsRequest, request: Request):
+    # C1: per-IP budget, checked BEFORE any PBKDF2 work.
+    allowed, retry_after = auth.check_ip_budget(client_ip(request), 'signup')
+    if not allowed:
+        raise HTTPException(status_code=429, detail=THROTTLE_MESSAGE,
+                            headers={'Retry-After': str(retry_after)})
+    body = {'email': auth.normalize_email(payload.email), 'message': SIGNUP_MESSAGE}
     try:
         user_id = auth.create_user(payload.email, payload.password)
     except auth.DuplicateEmail:
-        raise HTTPException(status_code=409, detail=DUPLICATE_MESSAGE) from None
-    except ValueError as error:  # safety net; Pydantic normally rejects first (422)
+        # W4: enumeration-safe. Burn one PBKDF2 (create_user probed before hashing)
+        # and return the IDENTICAL 201 body — but WITHOUT a Set-Cookie, since no new
+        # session exists. Residual oracle: the presence/absence of Set-Cookie still
+        # distinguishes duplicate from fresh; accepted and mitigated by the per-IP
+        # throttle above (an attacker cannot cheaply probe many addresses).
+        auth.equalize_timing(payload.password)
+        return JSONResponse(status_code=201, content=body)
+    except ValueError as error:  # N5: validate_email is the source of truth -> 422
         raise HTTPException(status_code=422, detail=str(error)) from error
     token = auth.create_session(user_id)  # auto-login straight after signup
-    return _session_response(201, token, {
-        'email': auth.normalize_email(payload.email),
-        'message': SIGNUP_MESSAGE,
-    })
+    return _session_response(201, token, body)
 
 
 @app.post('/auth/login')
-def auth_login(payload: CredentialsRequest):
+def auth_login(payload: CredentialsRequest, request: Request):
+    ip = client_ip(request)
+    # C1: per-IP budget, checked BEFORE any PBKDF2 work.
+    allowed, retry_after = auth.check_ip_budget(ip, 'login')
+    if not allowed:
+        raise HTTPException(status_code=429, detail=THROTTLE_MESSAGE,
+                            headers={'Retry-After': str(retry_after)})
     try:
-        user_id = auth.authenticate(payload.email, payload.password)
+        user_id = auth.authenticate(payload.email, payload.password, ip)  # W1: (ip, email) lockout
     except auth.AccountLocked as locked:
         raise HTTPException(status_code=401, detail=str(locked)) from None
     except auth.InvalidCredentials:
         # Constant message: no hint about whether the email exists.
         raise HTTPException(status_code=401, detail='Invalid email or password.') from None
+    except ValueError as error:  # N5: validate_email -> 422 (mirrors signup)
+        raise HTTPException(status_code=422, detail=str(error)) from error
     token = auth.create_session(user_id)
     return _session_response(200, token, {
         'email': auth.normalize_email(payload.email),
@@ -254,7 +302,8 @@ def auth_logout(request: Request):
     if token:
         auth.delete_session(token)
     response = JSONResponse(status_code=200, content={'message': 'Signed out. / الوداع۔'})
-    response.delete_cookie(auth.SESSION_COOKIE, path='/', httponly=True, samesite='lax')
+    response.delete_cookie(auth.SESSION_COOKIE, path='/', httponly=True, samesite='lax',
+                           secure=auth.cookie_secure())  # W3: identical flags on delete
     return response
 
 

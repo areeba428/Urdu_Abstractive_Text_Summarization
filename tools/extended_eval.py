@@ -38,6 +38,7 @@ import re
 import sys
 import time
 import unicodedata
+import urllib.error
 import urllib.request
 from collections import Counter
 from pathlib import Path
@@ -51,6 +52,12 @@ from eval_sweep import rouge_n, rouge_l, tokenize  # noqa: E402
 WEBAPP_ROOT = TOOLS_DIR.parent
 CSV_PATH = Path(r'D:\Urdu_text\checkpoints\manual_evaluation.csv')
 BASE_URL = 'http://127.0.0.1:8000'
+
+# C2: /summarize is now auth-gated, so the harness bootstraps a session for a
+# dedicated tool account before making any live calls.
+EVAL_EMAIL = 'eval@tools.local'
+EVAL_PASSWORD = 'ExtEval!2024#UrduSummarizer'
+_SESSION_COOKIE = None  # set by _obtain_session(); attached to every summarize_live
 
 REPORT_CARD = TOOLS_DIR / 'model_report_card.md'
 HUMAN_CSV = TOOLS_DIR / 'human_evaluation_sheet.csv'
@@ -115,13 +122,83 @@ def content_words(text_or_list):
 # ===========================================================================
 # Live API
 # ===========================================================================
-def summarize_live(article, mode='beam', timeout=180):
-    """POST /summarize to the RUNNING server; return the parsed JSON response."""
-    body = json.dumps({'article': article, 'mode': mode}).encode('utf-8')
-    req = urllib.request.Request(BASE_URL + '/summarize', data=body,
+def _post_json(path, payload, timeout=60):
+    """POST JSON to the live server; return ``(status, headers_msg, text)``.
+
+    ``headers_msg`` is the raw ``email.message.Message`` so multiple ``Set-Cookie``
+    headers survive (a plain dict would collapse them).
+    """
+    body = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(BASE_URL + path, data=body,
                                  headers={'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode('utf-8'))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.headers, resp.read().decode('utf-8', 'replace')
+    except urllib.error.HTTPError as err:
+        return err.code, err.headers, err.read().decode('utf-8', 'replace')
+
+
+def _session_from_cookies(headers_msg):
+    """Return the ``session=...`` cookie string from a response, else ``None``."""
+    if headers_msg is None:
+        return None
+    for line in (headers_msg.get_all('Set-Cookie') or []):
+        first = line.split(';', 1)[0].strip()
+        if first.startswith('session='):
+            return first
+    return None
+
+
+def _obtain_session():
+    """C2: bootstrap an authenticated session for the eval tool account.
+
+    Signs up ``eval@tools.local``; a fresh account auto-logs-in (Set-Cookie on the
+    201). If the address already exists the enumeration-safe signup returns 201
+    WITHOUT a cookie (or a legacy backend returns 409) — in that case log in
+    instead. Returns the raw ``session=...`` cookie string. Raises ``RuntimeError``
+    on any failure so the harness FAILS LOUDLY rather than recording empty
+    summaries as if they were real results.
+    """
+    status, headers_msg, text = _post_json(
+        '/auth/signup', {'email': EVAL_EMAIL, 'password': EVAL_PASSWORD})
+    cookie = _session_from_cookies(headers_msg)
+    if cookie:
+        print(f'[auth] signup ok (HTTP {status}); session acquired for {EVAL_EMAIL}', flush=True)
+        return cookie
+    # No cookie -> the account already existed (or signup was throttled). Log in.
+    status, headers_msg, text = _post_json(
+        '/auth/login', {'email': EVAL_EMAIL, 'password': EVAL_PASSWORD})
+    cookie = _session_from_cookies(headers_msg)
+    if cookie:
+        print(f'[auth] login ok (HTTP {status}); session acquired for {EVAL_EMAIL}', flush=True)
+        return cookie
+    raise RuntimeError(
+        f'auth bootstrap failed for {EVAL_EMAIL}: neither signup nor login returned a '
+        f'session cookie (last HTTP {status}): {text[:200]}'
+    )
+
+
+def summarize_live(article, mode='beam', timeout=180):
+    """POST /summarize to the RUNNING server; return the parsed JSON response.
+
+    C2: attaches the bootstrapped session cookie. A 401 (missing/expired session)
+    raises ``RuntimeError`` so the run aborts loudly instead of silently recording
+    an empty summary.
+    """
+    headers = {'Content-Type': 'application/json'}
+    if _SESSION_COOKIE:
+        headers['Cookie'] = _SESSION_COOKIE
+    body = json.dumps({'article': article, 'mode': mode}).encode('utf-8')
+    req = urllib.request.Request(BASE_URL + '/summarize', data=body, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode('utf-8'))
+    except urllib.error.HTTPError as err:
+        if err.code == 401:
+            raise RuntimeError(
+                'summarize returned HTTP 401 — the eval session is missing or expired; '
+                're-run _obtain_session()') from None
+        raise
 
 
 # ===========================================================================
@@ -145,6 +222,11 @@ def evaluate():
         reference = row['reference'].strip()
         try:
             res = summarize_live(article, mode='beam')
+        except RuntimeError as error:
+            # C2: an auth failure must abort the whole run, not yield empty summaries
+            # that would silently poison the report card.
+            print(f'FATAL [{i}]: {error}', flush=True)
+            raise SystemExit(1)
         except Exception as error:
             print(f'  [{i}] API ERROR: {error}', flush=True)
             res = {'summary': '', 'summary_words': 0, 'source_words': len(article.split()),
@@ -541,6 +623,13 @@ def main():
     print('=' * 74, flush=True)
     print('Task #20 extended evaluation (live server on :8000, mode=beam)', flush=True)
     print('=' * 74, flush=True)
+    # C2: bootstrap the tool-account session FIRST; fail loudly if it does not work.
+    global _SESSION_COOKIE
+    try:
+        _SESSION_COOKIE = _obtain_session()
+    except Exception as error:
+        print(f'FATAL: auth bootstrap failed: {error}', flush=True)
+        raise SystemExit(1)
     result = evaluate()
     write_report_card(result)
     write_human_csv(result)

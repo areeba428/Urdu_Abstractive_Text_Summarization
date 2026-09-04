@@ -43,6 +43,11 @@ def main() -> None:
 
     os.environ.setdefault('UATS_MODEL_DIR', args.model_dir)
     os.environ['PYTHONIOENCODING'] = 'utf-8'
+    # W3: on a plain-HTTP loopback bind the browser would DROP a Secure session
+    # cookie, breaking login. Opt out automatically for localhost; HF Spaces and
+    # Vercel serve HTTPS and keep Secure. An explicit AUTH_COOKIE_INSECURE wins.
+    if args.host in {'127.0.0.1', 'localhost', '::1'}:
+        os.environ.setdefault('AUTH_COOKIE_INSECURE', '1')
     os.chdir(ROOT)
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
@@ -51,6 +56,9 @@ def main() -> None:
 
     print(f'Model directory : {os.environ["UATS_MODEL_DIR"]}')
     print(f'Opening         : http://{args.host}:{args.port}/')
+    print('Cookie security : '
+          + ('INSECURE (loopback dev; AUTH_COOKIE_INSECURE)' if os.environ.get('AUTH_COOKIE_INSECURE')
+             else 'Secure (HTTPS)'))
     print('First start takes a minute: 510 MB state_dict + Stanza Urdu tokenizer.')
     print('Single worker by design (the model cache lives in-process).\n')
 
