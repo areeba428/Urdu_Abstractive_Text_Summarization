@@ -45,7 +45,7 @@ RUN python -c "import stanza; stanza.download('ur')"
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 COPY run.py ./run.py
-COPY requirements.txt ./requirements.txt
+COPY requirements-backend.txt ./requirements.txt
 
 # HF Spaces routes traffic to port 7860.
 EXPOSE 7860

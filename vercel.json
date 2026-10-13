@@ -1,26 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/summarize.py": {
-      "maxDuration": 60
-    },
-    "api/health.py": {
-      "maxDuration": 60
-    },
-    "api/sample.py": {
-      "maxDuration": 60
-    },
-    "api/auth_signup.py": {
-      "maxDuration": 60
-    },
-    "api/auth_login.py": {
-      "maxDuration": 60
-    },
-    "api/auth_logout.py": {
-      "maxDuration": 60
-    },
-    "api/auth_me.py": {
-      "maxDuration": 60
+    "api/**/*.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{backend/**,tools/**,.venv/**,data/**,spaces/**}"
     }
   },
   "rewrites": [

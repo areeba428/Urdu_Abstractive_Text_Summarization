@@ -31,14 +31,14 @@ cd webapp
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 
 # (b) everything else
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-backend.txt
 
 # (c) once, while online: the Urdu tokenizer weights (~15 MB)
 python -c "import stanza; stanza.download('ur')"
 ```
 
 Tested combination: `torch 2.14.0+cpu`, `fastapi 0.141.1`, `uvicorn 0.52.4`,
-`stanza 1.14.0`, `numpy 2.5.2`. `requirements.txt` pins those major bounds.
+`stanza 1.14.0`, `numpy 2.5.2`. `requirements-backend.txt` pins those major bounds.
 
 ## 3. Run
 

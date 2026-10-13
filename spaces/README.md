@@ -28,17 +28,17 @@ Dockerfile          <- copy from spaces/Dockerfile in this repo (to the ROOT)
 backend/            <- the whole backend package
 frontend/           <- the single-page UI
 run.py
-requirements.txt
+requirements-backend.txt
 ```
 
 Copy this repo's `spaces/Dockerfile` to the Space **root** as `Dockerfile`, then
-add `backend/`, `frontend/`, `run.py` and `requirements.txt` alongside it. You can
+add `backend/`, `frontend/`, `run.py` and `requirements-backend.txt` alongside it. You can
 drag-and-drop them in the Space's **Files** tab, or push with git:
 
 ```bash
 git clone https://huggingface.co/spaces/<your-user>/<your-space>
 cd <your-space>
-# copy backend/ frontend/ run.py requirements.txt and spaces/Dockerfile -> ./Dockerfile
+# copy backend/ frontend/ run.py requirements-backend.txt and spaces/Dockerfile -> ./Dockerfile
 git lfs install
 git add .
 git commit -m "Add Urdu summarizer backend"

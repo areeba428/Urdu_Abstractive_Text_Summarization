@@ -1,18 +1,3 @@
-# Urdu Abstractive Summarization — web app dependencies
-#
-# Upper bounds reflect the versions this app was actually tested with
-# (torch 2.14.0+cpu, fastapi 0.141.1, uvicorn 0.52.4, stanza 1.14.0, numpy 2.5.2).
-#
-# Install CPU-only torch FIRST, from the PyTorch CPU index, otherwise pip pulls
-# the multi-gigabyte CUDA build:
-#     pip install torch --index-url https://download.pytorch.org/whl/cpu
-#
-# Then:  pip install -r requirements.txt
-# And once, while online, to fetch the Urdu tokenizer weights:
-#     python -c "import stanza; stanza.download('ur')"
-
-torch>=2.2,<3               # CPU wheel: pip install torch --index-url https://download.pytorch.org/whl/cpu
-fastapi>=0.110,<1
-uvicorn[standard]>=0.29,<1
-stanza>=1.8,<2
-numpy>=1.26,<3
+# Vercel installs this file into every Python function.
+# The api/ proxies use the Python standard library only.
+# Backend packages live in requirements-backend.txt.

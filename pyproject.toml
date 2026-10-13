@@ -1,13 +1,4 @@
-
 [project]
 name = "urdu-abstractive-text-summarization"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = [
-    "fastapi",
-    "uvicorn",
-    "stanza",
-]
-
-[tool.vercel]
-entrypoint = "backend.main:app"
